@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 )
@@ -11,24 +12,56 @@ import (
 type Count struct {
 	lines int
 	words int
+	size  int
 }
 
-func counter(scanner bufio.Scanner, optionLine bool) Count {
+func alphaCheck(r rune) int {
+	switch {
+	case (97 <= r && r <= 122) || (65 <= r && r <= 90) || (48 <= r && r <= 57):
+		return 0
+	case r == 32:
+		return 1
+	default:
+		return 2
+	}
+}
+
+func counter(reader bufio.Reader) Count {
 	var count Count
 
-	lines := 0
-	for scanner.Scan() {
-		if optionLine {
-			lines++
+	word := 0
+	for {
+		if r, size, err := reader.ReadRune(); err != nil {
+			if err == io.EOF {
+				if word != 0 {
+					count.words++
+				}
+				break
+			} else {
+				log.Fatal(err)
+			}
+		} else {
+			if r == '\n' {
+				count.lines++
+				count.words++
+				word = 0
+			} else if alphaCheck(r) == 1 {
+				count.words++
+			} else if alphaCheck(r) == 0 {
+				word++
+			}
+
+			count.size += size
 		}
 	}
-	count.lines = lines
 	return count
 }
 
 func main() {
 
-	optionLine := flag.Bool("l", false, "count lines")
+	optionLines := flag.Bool("l", false, "print the newline counts")
+	optionBytes := flag.Bool("c", false, "print the byte counts")
+	optionWords := flag.Bool("w", false, "print the word counts")
 	flag.Parse()
 
 	if flag.NArg() == 0 {
@@ -43,12 +76,21 @@ func main() {
 		log.Fatal(err)
 	}
 
-	scanner := bufio.NewScanner(file)
-	if err := scanner.Err(); err != nil {
-		fmt.Fprintln(os.Stderr, "reading standard input:", err)
+	reader := bufio.NewReader(file)
+
+	count := counter(*reader)
+
+	output := ""
+
+	if *optionWords {
+		output += fmt.Sprintf(" %d", count.words)
+	}
+	if *optionLines {
+		output += fmt.Sprintf(" %d", count.lines)
+	}
+	if *optionBytes {
+		output += fmt.Sprintf(" %d", count.size)
 	}
 
-	count := counter(*scanner, *optionLine)
-
-	fmt.Printf("%d %s\n", count.lines, fileName)
+	fmt.Printf("%s %s\n", output, fileName)
 }
